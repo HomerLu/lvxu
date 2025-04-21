@@ -9,70 +9,11 @@
 #include <vidcap.h>
 
 #pragma comment(lib, "strmiids")
+#pragma comment(lib, "ksproxy.lib")
 
 using namespace std;
 
-
-#if 0
-luvc_WriteEx(
-	hFW = fwi,
-	xu = unit,
-	Selector = dwAddress,
-	pdata = pbValue,
-	szLength = bSize,
-	pReturnBufferSize = 0);
-Device d(hFW)
-
-DevSpecificWriteDevice(
-	xu = xu,
-	Selector = Selector,
-	data = pdata,
-	sz = szLength,
-	ret = pReturnBufferSize)
-
-	GenericAccessProperty(
-		pGuid = pInterface(xu),
-		Flags = KSPROPERTY_TYPE_SET | KSPROPERTY_TYPE_TOPOLOGY,
-		Selector = Selector,
-		data = data,
-		data_length = sz,
-		dwreturned = ret);
-KSP_NODE ExtensionProp = {
-  Set = pGuid,
-  Id = Selector,
-  Flags = Flags,
-  NodeId = pGuid.second // how?????
-}
-
-AccessProperty(
-	pNode = (KSPROPERTY*)&ExtensionProp,
-	szNode = sizeof(KSP_NODE),
-	data = data,
-	data_length = data_length,
-	dwreturned = &transfer)
-
-	ksdispatch::ksproperty(
-		handle = hDevice = m_KsObject->KsGetObjectHandle(),
-		Property = (LPVOID)pNode,
-		PropertyLength = szNode,
-		PropertyData = data,
-		DataLength = data_length,
-		BytesReturned = dwreturned);
-
-KsSynchronousDeviceControl( // KsProxy.h API
-	Handle = handle,
-	IoControl = IOCTL_KS_PROPERTY,
-	InBuffer = Property,
-	InLength = PropertyLength,
-	OutBuffer = PropertyData,
-	OutLength = DataLength,
-	BytesReturned = BytesReturned
-#endif
-
-
-
-
-
+static const GUID LVXU_DEVICE_INFO = { 0x69678ee4, 0x410f, 0x40db, { 0xa8, 0x50, 0x74, 0x20, 0xd7, 0xd8, 0x24, 0xe } };
 
 int main(int argc, const char **argv)
 {
@@ -110,7 +51,7 @@ int main(int argc, const char **argv)
 		DWORD cFetched;
 		while ((hr = pEnum->Next(1, &pMoniker, &cFetched)) == S_OK)
 		{
-			int node;
+			DWORD node;
 			IPropertyBag* pPropertyBag = NULL;
 			IKsObject* pKsObject = NULL;
 
@@ -119,6 +60,8 @@ int main(int argc, const char **argv)
 			DWORD nNodes;
 			HANDLE handle;
 			KSP_NODE ExtensionProp;
+			char Data[sizeof(ExtensionProp)] = { 0 };
+			ULONG len = 0;
 
 			hr = pMoniker->BindToObject(pBindCtx, NULL, IID_IBaseFilter, (void**)&pFilter);
 			if (FAILED(hr)) continue;
@@ -127,31 +70,35 @@ int main(int argc, const char **argv)
 			hr = pFilter->QueryInterface(__uuidof(IKsObject), (void**)(&pKsObject));
 			if (FAILED(hr)) continue;
 
-
 			nNodes = 0;
 			hr = pKsTopologyInfo->get_NumNodes(&nNodes);
 			if (FAILED(hr)) continue;
 
+			GUID nodeType;
 			for (node = 0; node < nNodes; node++) {
-				GUID nodeType;
 				pKsTopologyInfo->get_NodeType(node, &nodeType);
 			}
-
-#if 0
 
 			handle = pKsObject->KsGetObjectHandle();
 			if (!handle) continue;
 
-			KsSynchronousDeviceControl(handle, IOCTL_KS_PROPERTY, )
-
-
-
-			ExtensionProp.Property.Set = GUID;
+			ExtensionProp.Property.Set = LVXU_DEVICE_INFO;
 			ExtensionProp.Property.Id = 1;
-			ExtensionProp.Property.Flags = KSPROPERTY_TYPE_SET | KSPROPERTY_TYPE_TOPOLOGY;
-			ExtensionProp.NodeId; = ? ? ? ;
+			ExtensionProp.Property.Flags = KSPROPERTY_TYPE_SETSUPPORT | KSPROPERTY_TYPE_TOPOLOGY;
+			ExtensionProp.NodeId = 0;
 
-			KsSynchronousDeviceControl(handle, IOCTL_KS_PROPERTY, );
+
+			ExtensionProp.Property.Flags = KSPROPERTY_TYPE_SETSUPPORT | KSPROPERTY_TYPE_TOPOLOGY;
+			for (node = 0; node < nNodes; node++) {
+				ExtensionProp.Property.Id = node;
+				if (SUCCEEDED(KsSynchronousDeviceControl(handle, IOCTL_KS_PROPERTY, &ExtensionProp, sizeof(ExtensionProp), Data, sizeof(Data), &len))) {
+					ExtensionProp.Property.Flags = KSPROPERTY_TYPE_SET | KSPROPERTY_TYPE_TOPOLOGY;
+					hr = KsSynchronousDeviceControl(handle, IOCTL_KS_PROPERTY, &ExtensionProp, sizeof(ExtensionProp), Data, sizeof(Data), &len);
+					break;
+				}
+			}
+
+#if 0
 			pMoniker->BindToStorage(pBindCtx, NULL, IID_IPropertyBag, (void**)&pPropertyBag);
 #endif
 		}
