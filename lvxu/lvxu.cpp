@@ -42,6 +42,48 @@ static const GUID LVXU_PERIPHERAL_GUID = {
 
 static const GUID DEV_SPECIFIC = { 0x941C7AC0, 0xC559, 0x11D0, { 0x8A, 0x2B, 0x00, 0xA0, 0xC9, 0x25, 0x5A, 0xC1} };
 
+static void Help()
+{
+    printf("Syntax:\n");
+    printf("  LVXU.EXE <xu-name> read <cs>\n");
+    printf("  - to read extension unit\n");
+    printf("  LVXU.EXE <xu-name> write <cs> <data>\n");
+    printf("  - to write extension unit\n");
+    printf("Options:\n");
+    printf("  --vid <vid>\n");
+    printf("  --pid <pid>\n");
+    printf("  --intf <interface>\n");
+}
+
+static int hexstr2array(const char* ptr, UCHAR* Data)
+{
+    char tmp[3];
+    size_t len = strlen(ptr);
+    int cnt = 0;
+
+    if (len & 1) {
+        tmp[0] = ptr[0];
+        tmp[1] = 0;
+        *Data = (UCHAR)strtoul(tmp, NULL, 16);
+        len--;
+        Data++;
+        ptr++;
+        cnt++;
+    }
+
+    while (len) {
+        tmp[0] = ptr[0];
+        tmp[1] = ptr[1];
+        tmp[2] = 0;
+        *Data = (UCHAR)strtoul(tmp, NULL, 16);
+        len-=2;
+        Data++;
+        ptr+=2;
+        cnt++;
+    }
+    return cnt;
+}
+
 int main(int argc, const char **argv)
 {
     HRESULT hr;
@@ -57,18 +99,98 @@ int main(int argc, const char **argv)
     ULONG xuLength = 0;
     ULONG byteReturned = 0;
     ULONG ControlSelector;
-    bool read;
+    bool read = false;
     UCHAR Data[64] = { 0 };
-
-    // set by arguments
-    ControlSelector = 1;
-    read = true;
-    XU.Property.Set = LVXU_DEVICE_INFO_GUID;
-
+    ULONG DataLen = 0;
+    int VID = -1;
+    int PID = -1;
+    int Intf = -1;
+    int inState = 0;
 
     hr = CoInitialize(0);
     if (FAILED(hr)) {
         return hr;
+    }
+
+    while (argc) {
+        if (strcmp(argv[1], "--vid") == 0) {
+            argc--;
+            argv++;
+            if (argc == 0) break;
+            VID = strtol(argv[1], NULL, 16);
+        } else if (strcmp(argv[1], "--pid") == 0) {
+            argc--;
+            argv++;
+            if (argc == 0) break;
+            PID = strtol(argv[1], NULL, 16);
+        }
+        else if (strcmp(argv[1], "--intf") == 0) {
+            argc--;
+            argv++;
+            if (argc == 0) break;
+            Intf = strtol(argv[1], NULL, 0);
+        } else if(argv[1][0]=='-') {
+            printf("unsupported option: \"%s\"\n", argv[1]);
+            Help();
+            goto Return;
+        } else {
+            switch (inState) {
+            case 0: // GUID
+                if (strcmp(argv[1], "infoxu") == 0) {
+                    XU.Property.Set = LVXU_DEVICE_INFO_GUID;
+                }
+                else if (strcmp(argv[1], "testxu") == 0) {
+                    XU.Property.Set = LVXU_TEST_GUID;
+                }
+                else if (strcmp(argv[1], "videoxu") == 0) {
+                    XU.Property.Set = LVXU_VIDEO_GUID;
+                }
+                else if (strcmp(argv[1], "pcxu") == 0) {
+                    XU.Property.Set = LVXU_PERIPHERAL_GUID;
+                }
+                else {
+                    printf("syntax error: \"%s\" isn't an XU\n", argv[1]);
+                    Help();
+                    goto Return;
+                }
+                break;
+            case 1: // read/write
+                if (strcmp(argv[1], "read") == 0) {
+                    read = true;
+                }
+                else if (strcmp(argv[1], "write") == 0) {
+                    read = false;
+                }
+                else {
+                    printf("syntax error: \"%s\" must be read or write\n", argv[1]);
+                    Help();
+                    goto Return;
+                }
+                break;
+            case 2: // CS
+                ControlSelector = strtol(argv[1], NULL, 0);
+                if (ControlSelector == 0) {
+                    printf("syntax error: \"%s\" isn't a valid control selector\n", argv[1]);
+                    Help();
+                    goto Return;
+                }
+                break;
+            }
+            inState++;
+        }
+        argc--;
+        argv++;
+    }
+
+    if (!read) {
+        if (argc <= 0) {
+            printf("syntax error: write command, but data doesn't exist\n");
+            Help();
+            goto Return;
+        }
+        DataLen = hexstr2array(argv[1], Data);
+        argc--;
+        argv++;
     }
 
     hr = CreateBindCtx(NULL, &pBindCtx);
@@ -139,11 +261,6 @@ int main(int argc, const char **argv)
                 if (FAILED(hr)) goto Return;
             }
 
-            // nNode = pFilter->pKsTopologyInfo->get_NodeNumber();
-            // len, node = pFilter->pKsControl(guid,cs)
-
-            // pKsControl->get
-            // pKsControl->set
             pMoniker->Release();
             pMoniker = NULL;
         }
