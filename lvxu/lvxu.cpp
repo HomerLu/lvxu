@@ -58,6 +58,7 @@ int main(int argc, const char **argv)
     ULONG byteReturned = 0;
     ULONG ControlSelector;
     bool read;
+    UCHAR Data[64] = { 0 };
 
     // set by arguments
     ControlSelector = 1;
@@ -122,11 +123,20 @@ int main(int argc, const char **argv)
             hr = pKsControl->KsProperty((KSPROPERTY*)&XU, sizeof(XU), NULL, 0, &xuLength);
             if (hr != HRESULT_FROM_WIN32(ERROR_MORE_DATA)) goto Return;
 
+            // access data
             if (read) {
                 XU.Property.Flags = KSPROPERTY_TYPE_GET | KSPROPERTY_TYPE_TOPOLOGY;
+                hr = pKsControl->KsProperty((KSPROPERTY*)&XU, sizeof(XU), Data, sizeof(Data), &xuLength);
+                if (FAILED(hr)) goto Return;
+                for (UWORD i = 0; i < xuLength; i++) {
+                    printf("%02X", Data[i]);
+                }
+                printf("\n");
             }
             else {
                 XU.Property.Flags = KSPROPERTY_TYPE_SET | KSPROPERTY_TYPE_TOPOLOGY;
+                hr = pKsControl->KsProperty((KSPROPERTY*)&XU, sizeof(XU), Data, sizeof(Data), &xuLength);
+                if (FAILED(hr)) goto Return;
             }
 
             // nNode = pFilter->pKsTopologyInfo->get_NodeNumber();
