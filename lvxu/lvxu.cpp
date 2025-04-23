@@ -8,10 +8,12 @@
 #include <ksproxy.h>
 #include <vidcap.h>
 #include <ksmedia.h>
-#include <map>
+
+#include <cfgmgr32.h>
 
 #pragma comment(lib, "strmiids")
 #pragma comment(lib, "ksproxy.lib")
+#pragma comment(lib, "cfgmgr32.lib")
 
 using namespace std;
 
@@ -84,6 +86,67 @@ static int hexstr2array(const char* ptr, UCHAR* Data)
     return cnt;
 }
 
+
+
+
+#if 0
+// Helper: Get DevicePath from SetupAPI
+std::wstring GetDevicePathFromFriendlyName(const std::wstring& targetName) {
+    HDEVINFO hDevInfo = SetupDiGetClassDevs(&KSCATEGORY_CAPTURE, nullptr, nullptr, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+    if (hDevInfo == INVALID_HANDLE_VALUE) return L"";
+
+    SP_DEVICE_INTERFACE_DATA ifData = { 0 };
+    ifData.cbSize = sizeof(ifData);
+
+    WCHAR nameBuf[512];
+    WCHAR deviceIDBuf[512];
+
+    for (DWORD i = 0; SetupDiEnumDeviceInterfaces(hDevInfo, nullptr, &KSCATEGORY_CAPTURE, i, &ifData); ++i) {
+        DWORD requiredSize = 0;
+        SetupDiGetDeviceInterfaceDetail(hDevInfo, &ifData, nullptr, 0, &requiredSize, nullptr);
+
+        std::vector<BYTE> detailBuffer(requiredSize);
+        auto detail = (PSP_DEVICE_INTERFACE_DETAIL_DATA)detailBuffer.data();
+        detail->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
+
+        SP_DEVINFO_DATA devData = { 0 };
+        devData.cbSize = sizeof(devData);
+
+        if (SetupDiGetDeviceInterfaceDetail(hDevInfo, &ifData, detail, requiredSize, nullptr, &devData)) {
+            SetupDiGetDeviceRegistryProperty(hDevInfo, &devData, SPDRP_FRIENDLYNAME, nullptr,
+                (PBYTE)nameBuf, sizeof(nameBuf), nullptr);
+
+            if (targetName == nameBuf) {
+                // Get Device Instance ID
+                CM_Get_Device_IDW(devData.DevInst, deviceIDBuf, MAX_DEVICE_ID_LEN, 0);
+                SetupDiDestroyDeviceInfoList(hDevInfo);
+                std::wcout << L"  [DeviceInstanceID] " << deviceIDBuf << std::endl;
+                return detail->DevicePath;
+            }
+        }
+    }
+
+    SetupDiDestroyDeviceInfoList(hDevInfo);
+    return L"";
+}
+#endif
+
+DWORD GetNodeNumber(IBaseFilter *pFilter)
+{
+    DWORD nNodes = 0;
+    HRESULT hr;
+    IKsTopologyInfo* pKsTopologyInfo = NULL;
+
+    hr = pFilter->QueryInterface(__uuidof(IKsTopologyInfo), (void**)(&pKsTopologyInfo));
+    if (FAILED(hr)) goto Return;
+    hr = pKsTopologyInfo->get_NumNodes(&nNodes);
+    if (FAILED(hr)) goto Return;
+Return:
+    pKsTopologyInfo->Release();
+    return nNodes;
+}
+
+
 int main(int argc, const char **argv)
 {
     HRESULT hr;
@@ -92,8 +155,6 @@ int main(int argc, const char **argv)
     IEnumMoniker *pEnum = NULL;
     IMoniker* pMoniker = NULL;
     IBindCtx* pBindCtx = NULL;
-    IKsTopologyInfo* pKsTopologyInfo = NULL;
-    IKsControl* pKsControl = NULL;
     DWORD nNodes;
     KSP_NODE XU;
     ULONG xuLength = 0;
@@ -223,20 +284,21 @@ int main(int argc, const char **argv)
         DWORD cFetched;
         while ((hr = pEnum->Next(1, &pMoniker, &cFetched)) == S_OK)
         {
+            LPOLESTR wszDisplayName = NULL;
             IBaseFilter* pFilter;
             IKsControl* pKsControl = NULL;
-            IKsTopologyInfo* pKsTopologyInfo = NULL;
 
-            hr = pMoniker->BindToObject(pBindCtx, NULL, IID_IBaseFilter, (void**)&pFilter);
+            pMoniker->GetDisplayName(pBindCtx, NULL, &wszDisplayName);
+            wcout << wszDisplayName << endl;
+
+            hr = pMoniker->BindToObject(pBindCtx, NULL, __uuidof(IBaseFilter), (void**)&pFilter);
             if (FAILED(hr)) continue;
-            hr = pFilter->QueryInterface(__uuidof(IKsTopologyInfo), (void**)(&pKsTopologyInfo));
-            if (FAILED(hr)) goto Return;
-            pFilter->QueryInterface(__uuidof(IKsControl), (void**)(&pKsControl));
-            if (FAILED(hr)) goto Return;
-            hr = pKsTopologyInfo->get_NumNodes(&nNodes);
+
+            hr = pFilter->QueryInterface(__uuidof(IKsControl), (void**)(&pKsControl));
             if (FAILED(hr)) goto Return;
 
             // find NodeID
+            nNodes = GetNodeNumber(pFilter);
             XU.Property.Id = KSPROPERTY_EXTENSION_UNIT_INFO;
             XU.Property.Flags = KSPROPERTY_TYPE_GET | KSPROPERTY_TYPE_TOPOLOGY;
             for (XU.NodeId = 0; XU.NodeId < nNodes; XU.NodeId++) {
@@ -263,7 +325,7 @@ int main(int argc, const char **argv)
                     printf("%02X", Data[i]);
                 }
                 printf("\n");
-                break;
+                // break;
             }
             else {
                 XU.Property.Flags = KSPROPERTY_TYPE_SET | KSPROPERTY_TYPE_TOPOLOGY;
@@ -271,14 +333,19 @@ int main(int argc, const char **argv)
                 if (FAILED(hr)) goto Return;
             }
 
+
+            pKsControl->Release();
+            pKsControl = NULL;
+            pFilter->Release();
+            pFilter = NULL;
+            CoTaskMemFree(wszDisplayName);
+            wszDisplayName = NULL;
             pMoniker->Release();
             pMoniker = NULL;
         }
     }
 
 Return:
-    if (pKsControl) pKsControl->Release();
-    if (pKsTopologyInfo) pKsTopologyInfo->Release();
     if (pBindCtx) pBindCtx->Release();
     if (pMoniker) pMoniker->Release();
     if (pEnum) pEnum->Release();
