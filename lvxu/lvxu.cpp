@@ -107,76 +107,84 @@ int main(int argc, const char **argv)
     int Intf = -1;
     int inState = 0;
 
+    // skip argv[0]
+    argc--;
+    argv++;
+
     hr = CoInitialize(0);
     if (FAILED(hr)) {
         return hr;
     }
 
     while (argc) {
-        if (strcmp(argv[1], "--vid") == 0) {
+        if (strcmp(argv[0], "--vid") == 0) {
             argc--;
             argv++;
             if (argc == 0) break;
-            VID = strtol(argv[1], NULL, 16);
-        } else if (strcmp(argv[1], "--pid") == 0) {
-            argc--;
-            argv++;
-            if (argc == 0) break;
-            PID = strtol(argv[1], NULL, 16);
+            VID = strtol(argv[0], NULL, 16);
         }
-        else if (strcmp(argv[1], "--intf") == 0) {
+        else if (strcmp(argv[0], "--pid") == 0) {
             argc--;
             argv++;
             if (argc == 0) break;
-            Intf = strtol(argv[1], NULL, 0);
-        } else if(argv[1][0]=='-') {
-            printf("unsupported option: \"%s\"\n", argv[1]);
+            PID = strtol(argv[0], NULL, 16);
+        }
+        else if (strcmp(argv[0], "--intf") == 0) {
+            argc--;
+            argv++;
+            if (argc == 0) break;
+            Intf = strtol(argv[0], NULL, 0);
+        }
+        else if(argv[0][0]=='-') {
+            printf("unsupported option: \"%s\"\n", argv[0]);
             Help();
             goto Return;
-        } else {
+        }
+        else {
             switch (inState) {
             case 0: // GUID
-                if (strcmp(argv[1], "infoxu") == 0) {
+                if (strcmp(argv[0], "infoxu") == 0) {
                     XU.Property.Set = LVXU_DEVICE_INFO_GUID;
                 }
-                else if (strcmp(argv[1], "testxu") == 0) {
+                else if (strcmp(argv[0], "testxu") == 0) {
                     XU.Property.Set = LVXU_TEST_GUID;
                 }
-                else if (strcmp(argv[1], "videoxu") == 0) {
+                else if (strcmp(argv[0], "videoxu") == 0) {
                     XU.Property.Set = LVXU_VIDEO_GUID;
                 }
-                else if (strcmp(argv[1], "pcxu") == 0) {
+                else if (strcmp(argv[0], "pcxu") == 0) {
                     XU.Property.Set = LVXU_PERIPHERAL_GUID;
                 }
                 else {
-                    printf("syntax error: \"%s\" isn't an XU\n", argv[1]);
+                    printf("syntax error: \"%s\" isn't an XU\n", argv[0]);
                     Help();
                     goto Return;
                 }
                 break;
-            case 1: // read/write
-                if (strcmp(argv[1], "read") == 0) {
+            case 1: // read|write
+                if (strcmp(argv[0], "read") == 0) {
                     read = true;
                 }
-                else if (strcmp(argv[1], "write") == 0) {
+                else if (strcmp(argv[0], "write") == 0) {
                     read = false;
                 }
                 else {
-                    printf("syntax error: \"%s\" must be read or write\n", argv[1]);
+                    printf("syntax error: \"%s\" must be read or write\n", argv[0]);
                     Help();
                     goto Return;
                 }
                 break;
             case 2: // CS
-                ControlSelector = strtol(argv[1], NULL, 0);
+                ControlSelector = strtol(argv[0], NULL, 0);
                 if (ControlSelector == 0) {
-                    printf("syntax error: \"%s\" isn't a valid control selector\n", argv[1]);
+                    printf("syntax error: \"%s\" isn't a valid control selector\n", argv[0]);
                     Help();
                     goto Return;
                 }
                 break;
             }
             inState++;
+            if (inState == 3) break;
         }
         argc--;
         argv++;
@@ -188,7 +196,7 @@ int main(int argc, const char **argv)
             Help();
             goto Return;
         }
-        DataLen = hexstr2array(argv[1], Data);
+        DataLen = hexstr2array(argv[0], Data);
         argc--;
         argv++;
     }
@@ -238,6 +246,7 @@ int main(int argc, const char **argv)
                     break;
                 }
             }
+            if (XU.NodeId == nNodes) continue;
 
             // get control length
             XU.Property.Id = ControlSelector;
@@ -254,6 +263,7 @@ int main(int argc, const char **argv)
                     printf("%02X", Data[i]);
                 }
                 printf("\n");
+                break;
             }
             else {
                 XU.Property.Flags = KSPROPERTY_TYPE_SET | KSPROPERTY_TYPE_TOPOLOGY;
