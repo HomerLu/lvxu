@@ -14,20 +14,6 @@
 #pragma comment(lib, "ksproxy.lib")
 #pragma comment(lib, "cfgmgr32.lib")
 
-using namespace std;
-
-#if 0
-struct XUDESC {
-    GUID guidExtensionCode;
-    UCHAR bNumControls;
-    UCHAR bNrInPins;
-    UCHAR baSourceID[1];
-    UCHAR bControlSize;
-    UCHAR bmControls[2];
-};
-#endif
-
-
 static const GUID LVXU_DEVICE_INFO_GUID = {
     0x69678ee4, 0x410f, 0x40db, { 0xa8, 0x50, 0x74, 0x20, 0xd7, 0xd8, 0x24, 0xe },
 };
@@ -42,6 +28,49 @@ static const GUID LVXU_PERIPHERAL_GUID = {
 };
 
 static const GUID DEV_SPECIFIC = { 0x941C7AC0, 0xC559, 0x11D0, { 0x8A, 0x2B, 0x00, 0xA0, 0xC9, 0x25, 0x5A, 0xC1} };
+
+static bool ParseGUID(const char* str, GUID* guid)
+{
+    USHORT data41;
+    ULONGLONG data42;
+    char* start = (char*)str;
+    char* end;
+    // 36fc9e60-c465-11cf-8056-444553540000
+    guid->Data1 = strtoul(start, &end, 16);
+    if (end - start != 8) return false;
+    if (*end != '-') return false;
+
+    start = end + 1;
+    guid->Data2 = (USHORT)strtoul(start, &end, 16);
+    if (end - start != 4) return false;
+    if (*end != '-') return false;
+    start = end + 1;
+
+    start = end + 1;
+    guid->Data3 = (USHORT)strtoul(start, &end, 16);
+    if (end - start != 4) return false;
+    if (*end != '-') return false;
+
+    start = end + 1;
+    data41 = (USHORT)strtoul(start, &end, 16);
+    if (end - start != 4) return false;
+    if (*end != '-') return false;
+
+    start = end + 1;
+    data42 = (ULONGLONG)strtoull(start, &end, 16);
+    if (end - start != 12) return false;
+    if (*end != '\0') return false;
+
+    guid->Data4[0] = (UCHAR)(data41 >> 8);
+    guid->Data4[1] = (UCHAR)data41;
+    guid->Data4[2] = (UCHAR)(data42 >> 40);
+    guid->Data4[3] = (UCHAR)(data42 >> 32);
+    guid->Data4[4] = (UCHAR)(data42 >> 24);
+    guid->Data4[5] = (UCHAR)(data42 >> 16);
+    guid->Data4[6] = (UCHAR)(data42 >> 8);
+    guid->Data4[7] = (UCHAR)data42;
+    return true;
+}
 
 static void Help()
 {
@@ -62,6 +91,11 @@ static int hexstr2array(const char* ptr, UCHAR* Data)
     size_t len = strlen(ptr);
     int cnt = 0;
 
+    if (ptr[0] == '0' && (ptr[1] == 'x' || ptr[1] == 'X')) {
+        ptr += 2;
+        len -= 2;
+    }
+
     if (len & 1) {
         tmp[0] = ptr[0];
         tmp[1] = 0;
@@ -77,9 +111,9 @@ static int hexstr2array(const char* ptr, UCHAR* Data)
         tmp[1] = ptr[1];
         tmp[2] = 0;
         *Data = (UCHAR)strtoul(tmp, NULL, 16);
-        len-=2;
+        ptr += 2;
+        len -= 2;
         Data++;
-        ptr+=2;
         cnt++;
     }
     return cnt;
@@ -159,6 +193,23 @@ static int ParseArguments(int argc, const char** argv, int& VID, int& PID, int& 
                 else if (strcmp(argv[0], "pcxu") == 0) {
                     guid = LVXU_PERIPHERAL_GUID;
                     xuName = argv[0];
+                }
+                else if (ParseGUID(argv[0], &guid)) {
+                    if (IsEqualGUID(guid, LVXU_DEVICE_INFO_GUID)) {
+                        xuName = "infoxu";
+                    }
+                    else if (IsEqualGUID(guid, LVXU_TEST_GUID)) {
+                        xuName = "testxu";
+                    }
+                    else if (IsEqualGUID(guid, LVXU_VIDEO_GUID)) {
+                        xuName = "videoxu";
+                    }
+                    else if (IsEqualGUID(guid, LVXU_PERIPHERAL_GUID)) {
+                        xuName = "pcxu";
+                    }
+                    else {
+                        xuName = argv[0];
+                    }
                 }
                 else {
                     printf("syntax error: \"%s\" isn't an XU\n", argv[0]);
@@ -346,7 +397,7 @@ int main(int argc, const char **argv)
             for (ULONG i = 0; i < DataLen; i++) {
                 printf(" %02X", Data[i]);
             }
-            printf("to");
+            printf(" to");
         }
         else {
             printf("failed to read from");
