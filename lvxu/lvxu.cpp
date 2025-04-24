@@ -14,20 +14,21 @@
 #pragma comment(lib, "ksproxy.lib")
 #pragma comment(lib, "cfgmgr32.lib")
 
-static const GUID LVXU_DEVICE_INFO_GUID = {
-    0x69678ee4, 0x410f, 0x40db, { 0xa8, 0x50, 0x74, 0x20, 0xd7, 0xd8, 0x24, 0xe },
-};
-static const GUID LVXU_TEST_GUID = {
-    0x1F5D4CA9, 0xDE11, 0x4487, { 0x84, 0x0D, 0x50, 0x93, 0x3C, 0x8E, 0xC8, 0xD1 },
-};
-static const GUID LVXU_VIDEO_GUID = {
-    0x49E40215, 0xF434, 0x47FE, { 0xB1, 0x58, 0x0E, 0x88, 0x50, 0x23, 0xE5, 0x1B },
-};
-static const GUID LVXU_PERIPHERAL_GUID = {
-    0xFFE52D21, 0x8030, 0x4E2C, { 0x82, 0xD9, 0xF5, 0x87, 0xD0, 0x05, 0x40, 0xBD },
+
+struct GUID_NAME {
+    const char* name;
+    GUID guid;
 };
 
-static const GUID DEV_SPECIFIC = { 0x941C7AC0, 0xC559, 0x11D0, { 0x8A, 0x2B, 0x00, 0xA0, 0xC9, 0x25, 0x5A, 0xC1} };
+#define NUM_GUID_TABLE 6
+GUID_NAME guidTable[NUM_GUID_TABLE] = {
+    {"infoxu",      {0x69678ee4, 0x410f, 0x40db, { 0xa8, 0x50, 0x74, 0x20, 0xd7, 0xd8, 0x24, 0x0e},},},
+    {"testxu",      {0x1F5D4CA9, 0xDE11, 0x4487, { 0x84, 0x0D, 0x50, 0x93, 0x3C, 0x8E, 0xC8, 0xD1},},},
+    {"videoxu",     {0x49E40215, 0xF434, 0x47FE, { 0xB1, 0x58, 0x0E, 0x88, 0x50, 0x23, 0xE5, 0x1B},},},
+    {"pcxu",        {0xFFE52D21, 0x8030, 0x4E2C, { 0x82, 0xD9, 0xF5, 0x87, 0xD0, 0x05, 0x40, 0xBD},},},
+    {"settings",    {0x2b02cf13, 0x77bd, 0x47a5, { 0x8f, 0x98, 0x08, 0x51, 0xa7, 0xa7, 0x68, 0x0c},},},
+    {"metadata",    {0x1607f965, 0x608f, 0x448c, { 0xa8, 0xb6, 0xaf, 0x39, 0xc1, 0xc8, 0x84, 0x24},},},
+};
 
 static bool ParseGUID(const char* str, GUID* guid)
 {
@@ -75,14 +76,29 @@ static bool ParseGUID(const char* str, GUID* guid)
 static void Help()
 {
     printf("Syntax:\n");
-    printf("  LVXU.EXE <xu-name> write <cs>\n");
+    printf("  LVXU.EXE <xu-name|guid> write <cs>\n");
+    printf("  - to read extension unit\n");
+    printf("  LVXU.EXE <xu-name|guid> write <cs> <data>\n");
     printf("  - to write extension unit\n");
-    printf("  LVXU.EXE <xu-name> write <cs> <data>\n");
-    printf("  - to write extension unit\n");
+    printf("<xu-name>:\n");
+    printf("  infoxu        69678EE4-410F-40DB-A850-7420d7d8240E\n");
+    printf("  testxu        1F5D4CA9-DE11-4487-840D-50933C8EC8D1\n");
+    printf("  videoxu       49E40215-F434-47FE-B158-0E885023E51B\n");
+    printf("  pcxu          FFE52D21-8030-4E2C-82D9-F587D00540BD\n");
+    printf("<cs>:\n");
+    printf("  Can be in decimal or hexadecimal (start with 0x)\n");
+    printf("<data>:\n");
+    printf("  Must be in hexadecimal. Numbers that do not begin with 0x are also considered hexadecimal.\n");
+    printf("\n");
     printf("Options:\n");
     printf("  --vid <vid>\n");
     printf("  --pid <pid>\n");
     printf("  --intf <interface>\n");
+    printf("\n");
+    printf("Example:\n");
+    printf("  LVXU.EXE infoxu read 1\n");
+    printf("  LVXU.EXE pcxu write 17 0xDF\n");
+    printf("  LVXU.EXE FFE52D21-8030-4E2C-82D9-F587D00540BD write 0x11 DF\n");
 }
 
 static int hexstr2array(const char* ptr, UCHAR* Data)
@@ -178,42 +194,26 @@ static int ParseArguments(int argc, const char** argv, int& VID, int& PID, int& 
         else {
             switch (inState) {
             case 0: // GUID
-                if (strcmp(argv[0], "infoxu") == 0) {
-                    guid = LVXU_DEVICE_INFO_GUID;
-                    xuName = argv[0];
-                }
-                else if (strcmp(argv[0], "testxu") == 0) {
-                    guid = LVXU_TEST_GUID;
-                    xuName = argv[0];
-                }
-                else if (strcmp(argv[0], "videoxu") == 0) {
-                    guid = LVXU_VIDEO_GUID;
-                    xuName = argv[0];
-                }
-                else if (strcmp(argv[0], "pcxu") == 0) {
-                    guid = LVXU_PERIPHERAL_GUID;
-                    xuName = argv[0];
-                }
-                else if (ParseGUID(argv[0], &guid)) {
-                    if (IsEqualGUID(guid, LVXU_DEVICE_INFO_GUID)) {
-                        xuName = "infoxu";
+                for (int i = 0; i < NUM_GUID_TABLE; i++) {
+                    if (strcmp(argv[0], guidTable[i].name) == 0) {
+                        guid = guidTable[i].guid;
+                        xuName = argv[0];
+                        break;
                     }
-                    else if (IsEqualGUID(guid, LVXU_TEST_GUID)) {
-                        xuName = "testxu";
-                    }
-                    else if (IsEqualGUID(guid, LVXU_VIDEO_GUID)) {
-                        xuName = "videoxu";
-                    }
-                    else if (IsEqualGUID(guid, LVXU_PERIPHERAL_GUID)) {
-                        xuName = "pcxu";
+                }
+                if (xuName == NULL) {
+                    if (ParseGUID(argv[0], &guid)) {
+                        for (int i = 0; i < NUM_GUID_TABLE; i++) {
+                            if (IsEqualGUID(guid, guidTable[i].guid)) {
+                                xuName = guidTable[i].name;
+                                break;
+                            }
+                        }
                     }
                     else {
-                        xuName = argv[0];
+                        printf("syntax error: \"%s\" isn't an XU\n", argv[0]);
+                        return false;
                     }
-                }
-                else {
-                    printf("syntax error: \"%s\" isn't an XU\n", argv[0]);
-                    return false;
                 }
                 break;
             case 1: // read|write
@@ -288,7 +288,8 @@ int main(int argc, const char **argv)
         return hr;
     }
 
-    if (!ParseArguments(argc, argv, VID, PID, Intf, xuName, XU.Property.Set, write, ControlSelector, Data, DataLen)) {
+    if (argc==0 || !ParseArguments(argc, argv, VID, PID, Intf, xuName, XU.Property.Set, write, ControlSelector, Data, DataLen)) {
+        Help();
         goto Return;
     }
 
