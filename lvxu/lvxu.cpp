@@ -73,18 +73,32 @@ static bool ParseGUID(const char* str, GUID* guid)
     return true;
 }
 
+char *guid2str(GUID guid, char* str, int len)
+{
+    // {0x1607f965, 0x608f, 0x448c, { 0xa8, 0xb6, 0xaf, 0x39, 0xc1, 0xc8, 0x84, 0x24}
+    sprintf_s(str, len, "%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+        guid.Data1,
+        guid.Data2,
+        guid.Data3,
+        guid.Data4[0], guid.Data4[1],
+        guid.Data4[2], guid.Data4[3], guid.Data4[4], guid.Data4[5], guid.Data4[6], guid.Data4[7]);
+    return str;
+}
+
 static void Help()
 {
     printf("Syntax:\n");
-    printf("  LVXU.EXE <xu-name|guid> write <cs>\n");
+    printf("  LVXU.EXE <xu-name|guid> read <cs>\n");
     printf("  - to read extension unit\n");
     printf("  LVXU.EXE <xu-name|guid> write <cs> <data>\n");
     printf("  - to write extension unit\n");
     printf("<xu-name>:\n");
-    printf("  infoxu        69678EE4-410F-40DB-A850-7420d7d8240E\n");
-    printf("  testxu        1F5D4CA9-DE11-4487-840D-50933C8EC8D1\n");
-    printf("  videoxu       49E40215-F434-47FE-B158-0E885023E51B\n");
-    printf("  pcxu          FFE52D21-8030-4E2C-82D9-F587D00540BD\n");
+
+    for (int i = 0; i < NUM_GUID_TABLE; i++) {
+        char str[64];
+        printf("  %-9s %s\n", guidTable[i].name, guid2str(guidTable[i].guid, str, sizeof(str)));
+    }
+
     printf("<cs>:\n");
     printf("  Can be in decimal or hexadecimal (start with 0x)\n");
     printf("<data>:\n");
