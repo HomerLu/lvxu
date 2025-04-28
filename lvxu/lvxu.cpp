@@ -217,11 +217,15 @@ static int ParseArguments(int argc, const char** argv, int& VID, int& PID, int& 
                 }
                 if (xuName == NULL) {
                     if (ParseGUID(argv[0], &guid)) {
-                        for (int i = 0; i < NUM_GUID_TABLE; i++) {
+                        int i;
+                        for (i = 0; i < NUM_GUID_TABLE; i++) {
                             if (IsEqualGUID(guid, guidTable[i].guid)) {
                                 xuName = guidTable[i].name;
                                 break;
                             }
+                        }
+                        if (i == NUM_GUID_TABLE) {
+                            xuName = argv[0];
                         }
                     }
                     else {
@@ -285,7 +289,7 @@ int main(int argc, const char **argv)
     ULONG ControlSelector;
     bool write = false;
     bool done = false;
-    UCHAR Data[64] = { 0 };
+    UCHAR Data[512] = { 0 };
     ULONG DataLen = 0;
     int VID = -1;
     int PID = -1;
